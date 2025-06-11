@@ -1,2 +1,213 @@
-Viết tiếp
-1.2 Thực trạng
+CHƯƠNG 1.  TỔNG QUAN VỀ BẢO MẬT TRONG HỆ THỐNG NHÚNG VÀ IOT. ĐỀ XUẤT BOOTLOADER BẢO MẬT CHO QUÁ TRÌNH CẬP NHẬT PHẦN MỀM TỪ XA 
+1.1 Tổng quan hệ thống nhúng, IoT và nhu cầu cập nhật phần mềm từ xa
+1.1.1 Giới thiệu về hệ thống nhúng và IoT
+1.1.2 Thực trạng áp dụng cập nhật phần mềm từ xa
+
+1.2 Các thách thức và cơ chế bảo mật trong quá trình cập nhật firmware
+1.2.1 Thách thức trong bảo mật cho FOTA
+1.2.2 Các cơ chế và thuật toán dùng trong bảo mật cho FOTA
+
+1.3 Đề xuất bootloader bảo mật cho hệ thống IoT dùng vi điều khiển ARM Cortex
+1.3.1 Sơ đồ tổng quan giải pháp.
+1.3.2 Ứng dụng các cơ chế bảo mật.
+1.3.3 Mục tiêu thiết kế (gắn vào cuối mục này như cô yêu cầu).
+
+1.4 Kết luận chương
+
+CHƯƠNG 2. CƠ SỞ LÝ THUYẾT VỀ BOOTLOADER CHO ỨNG DUNG FOTA SỬ DỤNG CÁC THUẬT TOÁN BẢO MẬT
+2.1. Tổng quan về bootloader trong hệ thống nhúng
+2.1.1 Vai trò và vị trí của bootloader trong tiến trình khởi động
+2.1.2 Các loại bootloader (basic, secure, dual-app, A/B, rollback...)
+
+2.2. Nguyên lý cập nhật firmware từ xa (FOTA)
+2.2.1 Kiến trúc cơ bản FOTA
+2.2.2 Yêu cầu kỹ thuật khi triển khai trên thiết bị nhúng
+
+2.3. Cơ sở lý thuyết về các thuật toán bảo mật sử dụng trong FOTA
+2.3.1 Thuật toán mã hóa AES-128
+2.3.2 Thuật toán băm SHA-256
+2.3.3 Chữ ký số RSA và cơ chế xác thực
+
+2.4. Mô hình phân vùng flash và cơ chế rollback
+2.4.1 Phân vùng A/B và vùng metadata
+2.4.2 Kỹ thuật khôi phục khi cập nhật thất bại
+
+2.5. Kết luận chương
+
+CHƯƠNG 3. THIẾT KẾ BOOTLOAER BẢO MẬT CHO ỨNG DỤNG FOTA TRÊN VI ĐIỀU KHIỂN ARM CORTEX
+
+3.1. Phân tích yêu cầu hệ thống
+3.1.1 Yêu cầu phần cứng – STM32F4, ESP32
+3.1.2 Giới hạn tài nguyên, yêu cầu bảo mật, tốc độ
+
+3.2. Kiến trúc tổng thể hệ thống cập nhật bảo mật
+3.2.1 Sơ đồ kết nối: ESP32 – WiFi – STM32
+3.2.2 Sơ đồ dữ liệu: firmware, signature, metadata
+
+3.3. Thiết kế quy trình cập nhật firmware trên thực tế
+3.3.1 Các bước thực hiện trên server/gateway
+3.3.2 Các bước xử lý trên bootloader STM32
+    – Giải mã AES
+    – Kiểm tra chữ ký RSA
+    – So sánh hash SHA-256
+    – Ghi phân vùng inactive
+    – Rollback nếu lỗi
+
+3.4. Phân vùng bộ nhớ và điều khiển cập nhật A/B
+3.4.1 Sơ đồ bộ nhớ Flash
+3.4.2 Vị trí lưu bootloader, firmware A/B, metadata
+3.4.3 Cơ chế chọn vùng active sau reset
+
+3.5. Giao thức truyền nhận firmware
+3.5.1 Giao tiếp UART giữa ESP32 và STM32
+3.5.2 Giao thức gói tin: cấu trúc, checksum, độ tin cậy
+
+3.6. Kết luận chương
+
+************************************************************************************
+
+\subsubsection{Thực trạng áp dụng cập nhật phần mềm từ xa}
+Trong những năm gần đây, cập nhật phần mềm từ xa (Firmware Over-The-Air – FOTA) đã trở thành một nhu cầu tất yếu trong vòng đời phát triển và vận hành thiết bị nhúng. Khi thiết bị được triển khai phân tán ở nhiều địa điểm khác nhau – đôi khi ở những khu vực không thể tiếp cận vật lý – việc cập nhật firmware bằng cáp hoặc giao diện trực tiếp là không thực tế. Thay vào đó, các giải pháp FOTA giúp giảm thiểu chi phí bảo trì, rút ngắn thời gian cập nhật và đảm bảo thiết bị luôn được vá lỗi bảo mật kịp thời.
+
+Theo khảo sát từ IoT Analytics (2023), có đến 74% doanh nghiệp phát triển thiết bị IoT coi FOTA là một yêu cầu bắt buộc trong thiết kế hệ thống, đặc biệt là ở các lĩnh vực như: thiết bị đeo y tế, cảm biến nông nghiệp, công tơ điện thông minh, và thiết bị công nghiệp. Thị trường ứng dụng FOTA không chỉ dừng ở các thiết bị IoT tiêu dùng mà còn được mở rộng mạnh mẽ trong ngành công nghiệp ô tô, nơi các hãng như Tesla, Ford, Toyota sử dụng FOTA để cập nhật hệ thống điều khiển động cơ, giao diện người dùng, và cả phần mềm liên quan đến an toàn.
+
+Trên thực tế, nhiều nền tảng nhúng phổ biến đã tích hợp sẵn khả năng hỗ trợ cập nhật từ xa. Ví dụ, Espressif ESP32 cung cấp OTA API trong bộ SDK ESP-IDF, cho phép cập nhật qua Wi-Fi với tính năng xác minh CRC và phân vùng A/B. Tương tự, STM32 hỗ trợ bootloader tùy biến và giao tiếp UART/USB, cho phép cập nhật qua phần mềm trung gian như STM32CubeProgrammer hoặc custom firmware tải qua mạng.
+
+Tuy vậy, việc triển khai FOTA trong môi trường nhúng vẫn còn gặp nhiều hạn chế. Một số hệ thống chỉ triển khai cập nhật cơ bản, không có kiểm tra chữ ký số hay mã hóa nội dung, khiến firmware có thể bị giả mạo hoặc sửa đổi bởi các cuộc tấn công trung gian. Ngoài ra, nhiều thiết bị nhúng có tài nguyên phần cứng hạn chế (ít RAM, flash nhỏ, không có bộ gia tốc mã hóa phần cứng), khiến cho việc tích hợp các thuật toán bảo mật tiêu chuẩn như AES, SHA hay RSA trở nên phức tạp.
+
+Bên cạnh yếu tố kỹ thuật, một số hệ thống còn bỏ qua khả năng rollback – tức quay trở về firmware trước đó nếu cập nhật mới thất bại. Điều này dẫn đến nguy cơ thiết bị bị “brick” hoàn toàn nếu firmware mới bị lỗi hoặc quá trình cập nhật bị gián đoạn.
+
+Tại Việt Nam, trong các dự án IoT quy mô nhỏ và vừa – chẳng hạn hệ thống giám sát cây trồng, trạm quan trắc môi trường, hoặc bộ điều khiển thiết bị điện – việc cập nhật firmware chủ yếu vẫn thực hiện qua cổng UART thủ công, hoặc gửi file OTA qua giao thức đơn giản không mã hóa. Điều này cho thấy tiềm năng và sự cấp thiết trong việc xây dựng một giải pháp bootloader bảo mật, nhẹ, hiệu quả, giúp các hệ thống này tiếp cận được mô hình FOTA hiện đại, an toàn hơn và phù hợp với phần cứng hiện có.
+
+/////////////////////
+\subsection{Các thách thức và cơ chế bảo mật trong quá trình cập nhật firmware}
+\subsubsection{Thách thức trong bảo mật cho FOTA}
+Mặc dù FOTA mang lại nhiều lợi ích trong vận hành thiết bị nhúng, quá trình cập nhật firmware từ xa lại tiềm ẩn nhiều rủi ro bảo mật nghiêm trọng nếu không có biện pháp bảo vệ phù hợp.
+
+Một trong những thách thức lớn nhất là nguy cơ firmware bị giả mạo hoặc chèn mã độc. Trong trường hợp không có xác thực nguồn gốc, thiết bị có thể vô tình nạp và thực thi một firmware do kẻ tấn công tạo ra, dẫn đến việc mất kiểm soát thiết bị hoặc khai thác dữ liệu nội bộ. Theo báo cáo của Palo Alto Networks (2022), hơn 55% lỗ hổng bảo mật IoT có liên quan đến firmware và quy trình cập nhật không an toàn.
+
+Ngoài ra, tính toàn vẹn dữ liệu cũng là một điểm yếu phổ biến. Trong môi trường truyền không dây, việc nhiễu sóng, mất gói hoặc tấn công trung gian (Man-in-the-Middle) có thể khiến firmware bị thay đổi trong quá trình truyền tải. Nếu không kiểm tra tính toàn vẹn bằng thuật toán băm như SHA-256, thiết bị có thể ghi đè firmware lỗi lên flash và không thể khởi động lại.
+
+Một vấn đề khác là thiếu khả năng phục hồi khi cập nhật thất bại. Nhiều thiết bị chỉ sử dụng một vùng flash cho firmware chính. Nếu quá trình ghi bị gián đoạn (do mất điện, reset), hệ thống có thể bị “brick”. Điều này đặc biệt nguy hiểm với các thiết bị triển khai cố định hoặc không có giao diện debug.
+
+Cuối cùng, rào cản quan trọng là hạn chế về tài nguyên phần cứng: vi điều khiển phổ biến như STM32F4 thường chỉ có vài trăm KB RAM và vài MB flash, không đủ để lưu firmware tạm, giải mã AES hay xác thực RSA nếu không được tối ưu kỹ. Do đó, giải pháp bảo mật cho FOTA cần được thiết kế nhẹ, hiệu quả, và phù hợp với đặc điểm phần cứng hạn chế.
+
+\subsubsection{Các cơ chế và thuật toán dùng trong bảo mật cho FOTA}
+Để giải quyết các thách thức nêu trên, các hệ thống FOTA hiện đại thường tích hợp ba lớp bảo vệ chính: bảo mật nội dung, xác thực nguồn gốc và đảm bảo tính toàn vẹn.
+
+    Mã hóa nội dung (confidentiality): Dữ liệu firmware thường được mã hóa trước khi truyền đi để tránh bị lộ thông tin. Thuật toán AES-128 (Advanced Encryption Standard) là lựa chọn phổ biến nhờ độ an toàn cao, tốc độ nhanh và khả năng triển khai hiệu quả trên các vi điều khiển ARM Cortex.
+
+    Xác thực nguồn gốc (authenticity): Thiết bị cần xác minh rằng firmware đến từ nguồn hợp lệ, thông qua chữ ký số (digital signature) được tạo bằng khóa riêng và kiểm tra bằng khóa công khai. RSA là một trong các thuật toán phổ biến cho mục đích này.
+
+    Kiểm tra toàn vẹn (integrity): Trước khi ghi firmware vào flash, thiết bị tính toán lại mã băm SHA-256 để so sánh với giá trị hash ban đầu được ký. Nếu không trùng khớp, firmware bị loại bỏ để đảm bảo hệ thống không thực thi dữ liệu lỗi.
+
+Ngoài ra, việc phân chia bộ nhớ thành hai phân vùng firmware (A/B) giúp hệ thống có khả năng phục hồi trong trường hợp cập nhật thất bại, bằng cách giữ lại bản firmware ổn định trước đó. Một số vi điều khiển như STM32 còn hỗ trợ kỹ thuật secure boot để xác minh firmware ngay từ quá trình khởi động.
+
+Các cơ chế trên cần được lựa chọn và triển khai cẩn thận, phù hợp với đặc điểm phần cứng cụ thể của hệ thống để đạt được sự cân bằng giữa tính bảo mật và hiệu suất xử lý.
+
+////////////
+\subsection{Đề xuất bootloader bảo mật cho hệ thống IoT dùng vi điều khiển ARM Cortex}
+\subsubsection{Sơ đồ tổng quan giải pháp}
+Giải pháp đề xuất gồm ba thành phần chính:
+
+    Tool mã hóa trên máy tính (Python):
+
+Người phát triển phần mềm sử dụng tool để:
+
+Tính SHA-256 trên firmware gốc.
+
+Ký mã băm bằng khóa riêng RSA.
+
+Mã hóa toàn bộ firmware bằng AES-128 (chế độ CBC).
+
+Tạo ra file .bin đã mã hóa + chữ ký + metadata.
+
+    Gateway trung gian (ESP32):
+
+Kết nối Internet hoặc nhận firmware từ máy tính.
+
+Gửi file .bin đã mã hóa qua UART tới STM32F4.
+
+Không thực hiện bất kỳ xử lý bảo mật nào.
+
+    Thiết bị chính (STM32F4):
+
+Nhận dữ liệu .bin từ ESP32.
+
+Giải mã firmware bằng AES-128.
+
+Tính lại mã băm SHA-256 từ dữ liệu sau giải mã.
+
+Giải mã chữ ký số bằng RSA (khóa công khai lưu trong flash).
+
+So sánh mã băm → nếu hợp lệ, ghi vào phân vùng inactive.
+
+Sau khi ghi xong, cập nhật metadata và chuyển boot sang vùng firmware mới.
+
+Sơ đồ minh họa tổng quan có thể được trình bày trong Hình 1.3.1 (Gateway → STM32 → xác thực → ghi flash).
+
+\subsubsection{Ứng dụng các cơ chế bảo mật}
+Tất cả quy trình bảo mật được thực hiện tại thiết bị đích (STM32F4):
+
+Giải mã AES-128: dữ liệu firmware được mã hóa bằng AES (CBC mode) tại tool phát hành. STM32 sử dụng khóa AES cố định để giải mã.
+
+Kiểm tra tính toàn vẹn: sau giải mã, STM32 tính lại SHA-256 và so sánh với mã băm đã ký được gửi kèm.
+
+Xác thực nguồn gốc: chữ ký số RSA trên mã băm ban đầu được kiểm tra bằng khóa công khai RSA đã lưu trong flash của STM32.
+
+Ghi flash và boot: sau xác thực, firmware được ghi vào phân vùng không hoạt động (A hoặc B). Nếu quá trình cập nhật thành công, metadata được cập nhật và bootloader sẽ chuyển sang vùng firmware mới.
+
+Việc phân tách rõ ràng giữa các thành phần giúp hệ thống vừa linh hoạt vừa bảo mật, đồng thời phù hợp với tài nguyên hạn chế của vi điều khiển.
+
+\subsubsection{Mục tiêu thiết kế}
+Giải pháp bootloader bảo mật được xây dựng nhằm đạt các mục tiêu sau:
+
+Tính bảo mật:
+
+Chỉ chấp nhận firmware hợp lệ, được ký số và mã hóa đúng định dạng.
+
+Bảo vệ nội dung firmware trong quá trình truyền tải.
+
+Phát hiện sửa đổi hoặc giả mạo firmware.
+
+Khả năng phục hồi và an toàn cập nhật:
+
+Phân vùng A/B, cho phép rollback khi cập nhật thất bại.
+
+Bootloader độc lập, chống ghi đè.
+
+Tối ưu tài nguyên hệ thống:
+
+Tận dụng thư viện mã hóa nhẹ (AES, SHA-256, RSA).
+
+Dung lượng bootloader nhỏ (< 32KB), phù hợp với STM32F4.
+
+Không yêu cầu phần cứng hỗ trợ mã hóa (dùng phần mềm thuần C).
+
+Tính khả thi và thực tiễn:
+
+Có thể áp dụng trong sản phẩm thương mại.
+
+Phù hợp với các thiết bị IoT quy mô vừa và nhỏ ở Việt Nam.
+
+Dễ tích hợp với quy trình phát hành phần mềm hiện có (tool Python đơn giản).
+
+📚 Tài liệu tham khảo:
+STMicroelectronics – AN4992 – STM32 microcontroller system security overview
+→ Hướng dẫn tổng thể về secure boot, flash layout, bảo mật AES/RSA trên STM32.
+https://www.st.com/resource/en/application_note/an4992-stm32-microcontroller-system-security-overview-stmicroelectronics.pdf
+
+NIST FIPS 197 – Advanced Encryption Standard (AES)
+→ Tiêu chuẩn thuật toán mã hóa AES, dùng trong quy trình bảo mật.
+https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
+
+////////////////////////
+\subsection{Kết luận chương}
+Chương 1 đã trình bày tổng quan về hệ thống nhúng, thiết bị IoT và tầm quan trọng của việc cập nhật phần mềm từ xa (FOTA) trong bối cảnh thiết bị được triển khai phân tán rộng rãi. Các thách thức về bảo mật như firmware giả mạo, mất tính toàn vẹn dữ liệu và cập nhật lỗi đã được phân tích, cho thấy sự cần thiết phải tích hợp các cơ chế bảo mật trong quá trình cập nhật.
+
+Từ đó, đề tài đã đề xuất một giải pháp bootloader bảo mật dành cho dòng vi điều khiển ARM Cortex, với sự tách biệt rõ ràng giữa ba thành phần: công cụ mã hóa phát hành firmware, gateway trung gian và thiết bị đích (STM32F4). Toàn bộ quá trình xác thực, giải mã và ghi flash được thực hiện trực tiếp tại bootloader, giúp đảm bảo an toàn trong môi trường không đáng tin cậy, đồng thời phù hợp với tài nguyên hạn chế của hệ thống nhúng.
+
+Phần tiếp theo (Chương 2) sẽ trình bày cơ sở lý thuyết liên quan đến các thành phần kỹ thuật trong giải pháp, bao gồm kiến trúc bootloader, các thuật toán mã hóa/băm/xác thực, cũng như tổ chức bộ nhớ và luồng cập nhật firmware an toàn.
+
+
+*********************************************************************************
