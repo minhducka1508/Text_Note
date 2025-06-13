@@ -1,0 +1,7 @@
+
+Các tiêu chí:
++ Dựa vào các tài liệu, có thể dịch ra tiếng việt là cũng được, đoạn nào dựa vào tại liệu thì đánh số kiểu IEEE
++ Viết thành các đoạn, và mỗi đoạn cố gắng dài tầm 15-20 dòng, có sử dụng item và đầu mục a,b,C
++ Tài liệu tham khảo phải theo kiểu IEEE
++ Chỗ nào cần thêm bảng hoặc hình ảnh thì bạn cần đề xuất tên bảng hoặc tên hình rồi tôi tự làm
++ Vi điều khiển hướng đến là arm Cortex chứ không riêng hãng nào hết, và gateway cũng vậy

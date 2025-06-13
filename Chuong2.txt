@@ -1,0 +1,196 @@
+2.1 Tổng quan về bootloader trong hệ thống nhúng – 3.5–4 trang
+2.1.1 Khái niệm, vai trò, vị trí khởi động
+→ Mô tả luồng khởi động trên STM32 (reset → boot ROM → bootloader → ứng dụng)
+→ Hình minh họa luồng boot process
+
+2.1.2 Các loại bootloader
+→ Mô tả từng loại: basic, secure, dual-app, rollback
+→ Bảng so sánh đặc điểm của từng loại
+
+2.2 Nguyên lý cập nhật firmware từ xa (FOTA) – 4–4.5 trang
+2.2.1 Kiến trúc FOTA tổng quát
+→ Mô hình 3 thành phần: Tool → Gateway → MCU
+→ Sơ đồ khối tổng quát hệ thống FOTA
+→ Phân tích vai trò từng khối
+
+2.2.2 Yêu cầu triển khai kỹ thuật
+→ Giao thức truyền, vùng nhớ, kiểm tra an toàn, CRC
+→ Các ràng buộc trên vi điều khiển: bộ nhớ, tốc độ xử lý
+
+2.3 Cơ sở lý thuyết về các thuật toán bảo mật trong FOTA – 7–8 trang
+2.3.1 AES-128
+→ Nguyên lý hoạt động, chế độ CBC, key size
+→ Sơ đồ quy trình mã hóa AES trong FOTA
+
+2.3.2 SHA-256
+→ Giải thích block-wise hash, padding
+→ Mục đích: kiểm tra toàn vẹn
+
+2.3.3 RSA & cơ chế chữ ký số
+→ Khái niệm public-private key
+→ Sơ đồ xác thực chữ ký số
+
+💡 Nên dùng thêm bảng so sánh giữa SHA-256 và CRC, RSA và ECDSA, để kéo nội dung.
+
+2.4 Mô hình phân vùng flash và cơ chế rollback – 3.5–4 trang
+2.4.1 Phân vùng A/B + metadata
+→ Giải thích cách chia vùng flash
+→ Hình sơ đồ phân vùng bộ nhớ
+
+2.4.2 Cơ chế rollback
+→ Khi nào rollback được kích hoạt
+→ Cờ trạng thái (active flag), ví dụ logic kiểm tra
+
+2.5 Kết luận chương – 0.5 trang
+
+==========================================================================
+Bạn vẫn có thể giữ 7–10 nguồn tổng thể, trong đó:
+
+Mã	Tài liệu	Phạm vi
+[1]	ST AN2606	2.1, 2.4
+[2]	ST AN4992	2.3, 2.4
+[3]	FIPS 197 – AES	2.3.1
+[4]	FIPS 180-4 – SHA	2.3.2
+[5]	PKCS#1 – RSA	2.3.3
+[6]	MCUboot overview	2.1.2
+[7]	Sách Embedded Systems (Noergaard)	2.1.1, 2.2
+
+======================2.2.1===================================================
+\subsubsection{Vai trò và vị trí của bootloader trong tiến trình khởi động}
+Trong hệ thống nhúng, tiến trình khởi động (boot process) đóng vai trò khởi tạo và đưa vi điều khiển từ trạng thái sau khi cấp nguồn về trạng thái sẵn sàng chạy ứng dụng. Quá trình này thường bao gồm các giai đoạn: thiết lập phần cứng cơ bản, xác định vùng khởi động và chuyển điều khiển tới chương trình chính. Bootloader là thành phần trung gian quan trọng trong chuỗi này, đặc biệt trong các hệ thống có khả năng cập nhật phần mềm từ xa (FOTA).
+
+Bootloader là một đoạn mã nhỏ được nạp vào vùng nhớ cố định (thường là flash nội) của vi điều khiển, với nhiệm vụ chuẩn bị môi trường và quyết định có chuyển quyền điều khiển sang ứng dụng chính hay không. Trong các vi điều khiển như STM32, bootloader có thể được cài đặt sẵn từ nhà sản xuất (ROM bootloader) hoặc do người dùng thiết kế và nạp vào flash (user bootloader).
+
+Vai trò cụ thể của bootloader bao gồm:
+
+Kiểm tra hợp lệ vùng ứng dụng: xác minh tính toàn vẹn và chữ ký số (nếu có).
+
+Xác định phân vùng firmware cần khởi động: ứng dụng A/B hoặc firmware chính/phụ.
+
+Hỗ trợ cập nhật phần mềm: thông qua UART, USB, hoặc giao tiếp không dây.
+
+Cung cấp khả năng rollback: trong trường hợp firmware mới lỗi hoặc không hợp lệ.
+
+Trong các hệ thống nhúng hiện đại, đặc biệt là những thiết bị triển khai ngoài thực địa như cảm biến môi trường, thiết bị giám sát năng lượng, hệ thống điều khiển từ xa... bootloader đóng vai trò như một lớp bảo vệ đầu tiên – không chỉ giúp thiết bị khởi động đúng vùng ứng dụng mà còn đảm bảo rằng ứng dụng đó là hợp lệ, không bị thay đổi hoặc giả mạo.
+
+Một số hệ thống còn triển khai secure boot hai cấp: cấp đầu tiên là bootloader được nạp vào vùng bộ nhớ bảo vệ ROM, không thể sửa đổi (read-only); cấp hai là bootloader của người dùng có khả năng tùy biến, nhưng phải vượt qua các bước xác thực mới được thực thi. Cơ chế này giúp hạn chế việc kẻ tấn công ghi đè bootloader bằng mã độc nếu có lỗ hổng.
+
+Vị trí trong luồng khởi động
+Luồng khởi động chuẩn của một hệ thống nhúng sử dụng STM32 có thể mô tả như sau:
+
++-------------------------------+
+| Reset / Power On             |
++---------------+---------------+
+                |
+                v
++-------------------------------+
+| ROM Bootloader (ST, optional)|
+| - Chọn boot mode             |
+| - Kiểm tra chân BOOT         |
++---------------+---------------+
+                |
+                v
++-------------------------------+
+| User Bootloader (tùy chỉnh)  |
+| - Kiểm tra firmware A/B      |
+| - Xác thực chữ ký số         |
+| - Rollback nếu cần           |
++---------------+---------------+
+                |
+                v
++-------------------------------+
+| Ứng dụng chính (firmware)    |
++-------------------------------+
+Hình 2.1 – Sơ đồ luồng khởi động trong hệ thống STM32 có bootloader bảo mật
+Các bước khởi động có thể mô tả như sau:
+
+Reset hoặc cấp nguồn → hệ thống khởi động từ ROM Bootloader.
+
+ROM Bootloader xác định chế độ boot (theo chân BOOTx).
+
+Nếu chọn boot từ flash: chuyển quyền đến User Bootloader.
+
+User Bootloader:
+
+Kiểm tra phân vùng active
+
+Giải mã firmware (AES)
+
+Kiểm tra mã băm (SHA-256)
+
+Xác thực chữ ký số (RSA)
+
+Nếu hợp lệ → nhảy tới ứng dụng chính
+
+Nếu lỗi → rollback hoặc chờ cập nhật mới
+
+Ứng dụng chính bắt đầu chạy.
+
+Trong hệ thống có hỗ trợ FOTA, bootloader thường được thiết kế riêng và chiếm vùng flash đầu tiên (thường từ địa chỉ 0x08000000 trên STM32F4), có thể đặt cờ kiểm tra để quyết định:
+
+Có nên vào chế độ cập nhật firmware không?
+
+Có nên boot vào firmware mới hay giữ lại bản cũ?
+
+Nếu firmware không hợp lệ, bootloader sẽ không chuyển quyền điều khiển, mà có thể thực hiện rollback hoặc chờ cập nhật mới.
+
+📚 Tài liệu tham khảo:
+[1] STMicroelectronics – AN2606, STM32 system memory boot mode.
+→ Giải thích chi tiết ROM bootloader, lựa chọn BOOT mode.
+https://www.st.com/resource/en/application_note/an2606-stm32-microcontroller-system-memory-boot-mode-stmicroelectronics.pdf
+
+[2] Tammy Noergaard, Embedded Systems Architecture, 2nd Edition, Elsevier.
+→ Tổng quan kiến trúc khởi động và vai trò bootloader trong hệ nhúng.
+
+==========================2.1.2=======================================================================
+\subsubsection{Các loại bootloader trong hệ thống nhúng}
+Tùy theo yêu cầu bảo mật, độ phức tạp và kiến trúc phần cứng, bootloader trong hệ thống nhúng được phân thành nhiều loại. Dưới đây là phân loại phổ biến nhất dựa trên chức năng và độ bảo mật.
+
+a) Bootloader cơ bản (basic bootloader)
+Là dạng đơn giản nhất, chỉ có nhiệm vụ chuyển quyền điều khiển sang ứng dụng chính. Không kiểm tra tính toàn vẹn, không hỗ trợ cập nhật hoặc rollback. Dạng này thường được tích hợp trong các vi điều khiển nhỏ, ít tài nguyên hoặc trong giai đoạn đầu phát triển.
+
+b) Bootloader có khả năng cập nhật (FOTA/DFU bootloader)
+Cho phép nạp lại firmware thông qua UART, USB hoặc không dây. Có thể bao gồm kiểm tra CRC đơn giản hoặc phân vùng đôi (dual image). Một số hỗ trợ giao thức như YMODEM, XMODEM, hoặc DFU (Device Firmware Upgrade).
+
+c) Bootloader bảo mật (secure bootloader)
+Tích hợp các tính năng bảo mật như:
+
+Xác minh chữ ký số (RSA/ECDSA)
+
+Mã hóa firmware (AES)
+
+Kiểm tra mã băm (SHA-256)
+
+Chống ghi đè bootloader
+Thường dùng trong sản phẩm thương mại hoặc các thiết bị triển khai diện rộng (OTA).
+
+d) Bootloader hỗ trợ rollback / phân vùng A/B
+Hệ thống chia làm hai phân vùng firmware (A và B). Khi cập nhật firmware mới, nếu kiểm tra thất bại (hash sai, chữ ký không hợp lệ), bootloader có thể quay lại bản cũ mà không làm "brick" hệ thống. Đây là kỹ thuật phổ biến trong thiết kế cập nhật an toàn.
+
+e) Bootloader đa cấp (multi-stage boot)
+Sử dụng nhiều cấp bootloader, ví dụ:
+
+ROM bootloader (bootloader gốc trong MCU) để load bootloader người dùng.
+
+Stage 1 bootloader: kiểm tra bảo mật cơ bản.
+
+Stage 2 bootloader: xử lý xác minh sâu hơn và chuyển quyền điều khiển.
+
+Các hệ thống bootloader thương mại phổ biến hiện nay như MCUboot, ST Secure Boot and Secure Firmware Update (SBSFU) hoặc NXP secure bootloader đều kết hợp nhiều tính năng như xác thực RSA, phân vùng A/B và rollback. Tuy nhiên, các giải pháp này thường phức tạp, đòi hỏi tài nguyên lớn, chưa tối ưu cho vi điều khiển cấp thấp.
+
+Trong phạm vi đề tài này, giải pháp bootloader được đề xuất có mức độ bảo mật tương đương secure bootloader thương mại, nhưng được thiết kế nhẹ, phù hợp cho STM32F4, với đầy đủ các bước kiểm tra AES, SHA-256, RSA và rollback bằng phân vùng flash A/B.
+
+📚 Tài liệu tham khảo:
+[1] STMicroelectronics – AN4992, STM32 microcontroller system security overview
+→ Giải thích mô hình secure boot và phân vùng A/B trên STM32.
+https://www.st.com/resource/en/application_note/an4992
+
+[2] MCUboot Documentation – Linaro
+→ Kiến trúc bootloader A/B, rollback, xác thực.
+https://docs.mcuboot.com
+
+[3] Tammy Noergaard, Embedded Systems Architecture, 2nd Edition
+→ Phân loại bootloader và kiến trúc hệ thống nhúng.
+
+
+
